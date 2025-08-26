@@ -1,0 +1,148 @@
+Resources:
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: connection_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connection_id
+          KeyType: HASH
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - apigateway.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: websocket-role
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "*"
+                Resource: !GetAtt ConnectionsTable.Arn
+              - Effect: "Allow"
+                Action: "logs:*"
+                Resource: "arn:aws:logs:*:*:*"
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+  WebSocketAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: WebsocketAPI
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+  SocketFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: socket.handler
+      Role: !GetAtt LambdaRole.Arn
+      Code:
+        S3Bucket: black-metal-666
+        S3Key: socket.zip
+      Runtime: python3.10
+      Timeout: 60
+  SocketLambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      IntegrationMethod: POST
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SocketFunction.Arn}/invocations"
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref SocketLambdaIntegration
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      RouteKey: $disconnect
+      Target: !Sub integrations/${SocketLambdaIntegration}
+  PushUpdateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      RouteKey: update
+      Target: !Sub integrations/${SocketLambdaIntegration}
+  ApiGatewayDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - DisconnectRoute
+      - PushUpdateRoute
+      - ConnectRoute
+    Properties:
+      Description: Lambda API Deployment
+      ApiId: !Ref WebSocketAPI
+  ApiGatewayStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      DeploymentId: !Ref ApiGatewayDeployment
+      ApiId: !Ref WebSocketAPI
+      StageName: "prod"
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+        LoggingLevel: INFO
+        DataTraceEnabled: false
+        ThrottlingBurstLimit: 10
+      AccessLogSettings:
+        DestinationArn: !GetAtt MyLogGroup.Arn
+        Format: $context.extendedRequestId $context.identity.sourceIp $context.identity.caller $context.identity.user [$context.requestTime] "$context.httpMethod $context.resourcePath $context.protocol" $context.status $context.responseLength $context.requestId
+  MyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join
+        - "-"
+        - - !Ref WebSocketAPI
+          - access-logs
+  LambdaLog:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${SocketFunction}"
+      RetentionInDays: 5
+  LambdaConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SocketFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*/$connect
+  LambdaDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SocketFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*/$disconnect
+  LambdaUpdatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SocketFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*/update

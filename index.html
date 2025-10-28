@@ -5,9 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>HTML 5 Boilerplate</title>
+    <script src="index.js"></script>
   </head>
   <body>
-    <script src="index.js"></script>
     <h1>Hey</h1>
+    <div style="display: flex; flex-direction: row">
+      <fieldset
+        id="details"
+        style="
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          gap: 10px;
+          border: 1px solid black;
+          margin: 0px;
+        "
+      >
+        <label for="username">enter your name</label>
+        <input type="text" name="username" />
+        <button onclick="connect()">submit name</button>
+      </fieldset>
+      <fieldset
+        disabled
+        id="controls"
+        style="
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          gap: 10px;
+          border: 1px solid black;
+          margin: 0px;
+        "
+      >
+        <label for="message">send a message</label>
+        <input type="text" name="message" />
+        <button onclick="sendMessage()">send message</button>
+      </fieldset>
+    </div>
+    <div id="chat" style="border: 1px solid black; height: 50vh"></div>
   </body>
 </html>

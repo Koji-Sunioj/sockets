@@ -33,6 +33,9 @@ Resources:
               - Effect: "Allow"
                 Action: "logs:*"
                 Resource: "arn:aws:logs:*:*:*"
+              - Effect: "Allow"
+                Action: "*"
+                Resource: "arn:aws:execute-api:*:*:*"
   ApiRole:
     Type: AWS::IAM::Role
     Properties:
@@ -54,7 +57,7 @@ Resources:
   SocketFunction:
     Type: AWS::Lambda::Function
     Properties:
-      Handler: socket.handler
+      Handler: main.handler
       Role: !GetAtt LambdaRole.Arn
       Code:
         S3Bucket: black-metal-666

@@ -17,10 +17,7 @@ class Connection {
   }
 }
 
-const connection = new Connection(
-  "wss://8029bgs248.execute-api.eu-north-1.amazonaws.com/prod/",
-  null
-);
+const connection = new Connection("", null);
 
 const connect = () => {
   const userName = document.querySelector("input[name=username]").value;
